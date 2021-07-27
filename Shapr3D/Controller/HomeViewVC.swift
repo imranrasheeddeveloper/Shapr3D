@@ -10,13 +10,10 @@ import MobileCoreServices
 class HomeViewVC: UIViewController, UIDocumentPickerDelegate {
     
     @IBOutlet weak var collectionView : UICollectionView!
-    
-    
+    private var convertObj = Conversion()
     var arrayOfData = [Model]()
-    var destURL : URL?
     let textLabel = UILabel()
     let emptyListImage = UIImageView()
-    let fileManager = FileManager.default
     
     
     // MARK: - Lifecycle
@@ -34,7 +31,7 @@ class HomeViewVC: UIViewController, UIDocumentPickerDelegate {
         collectionView.register(UINib(nibName: "ConversionCell", bundle: nil), forCellWithReuseIdentifier: "ConversionCell")
     }
     
-    func lisHaveNoData() {
+    func listHaveNoData() {
         collectionView.isHidden = true
         let image = UIImage(named: "emptyTable")
         emptyListImage.image = image
@@ -71,15 +68,6 @@ class HomeViewVC: UIViewController, UIDocumentPickerDelegate {
         })
     }
     
-    
-    // MARK: - IBAction
-    
-    @IBAction  func didTapDocumentPickerButton(sender : UIBarButtonItem) {
-        let documentPicker = UIDocumentPickerViewController(documentTypes: [String(kUTTypeText),String(kUTTypeContent),String(kUTTypeItem),String(kUTTypeData)], in: .import)
-        documentPicker.delegate = self
-        self.present(documentPicker, animated: true)
-    }
-    
     // MARK: - Long Press Gesture Action Sheet
     @objc func longPressActionCell(longPressGesture : UILongPressGestureRecognizer)
     {
@@ -93,7 +81,7 @@ class HomeViewVC: UIViewController, UIDocumentPickerDelegate {
             let deleteAction = UIAlertAction(title: "Delete", style: .destructive, handler: { [self] action in
                 CoreDataHelper.shared.deleteData(model: arrayOfData[indexPath!.row], completionalHandler: { isDeleted in
                     if isDeleted{
-                        removeFileFromDir(fileName: arrayOfData[indexPath!.row].fileName)
+                        DocumentHelper.shared.removeFileFromDir(fileName: arrayOfData[indexPath!.row].fileName)
                         arrayOfData.remove(at: indexPath!.row)
                         
                         self.collectionView!.reloadData()
@@ -117,80 +105,27 @@ class HomeViewVC: UIViewController, UIDocumentPickerDelegate {
         }
     }
     
+    // MARK: - IBAction
+    
+    @IBAction  func didTapDocumentPickerButton(sender : UIBarButtonItem) {
+        let documentPicker = UIDocumentPickerViewController(documentTypes: [String(kUTTypeText),String(kUTTypeContent),String(kUTTypeItem),String(kUTTypeData)], in: .import)
+        documentPicker.delegate = self
+        self.present(documentPicker, animated: true)
+    }
+    
     
     //MARK: - DocumentPicker Delegate & Helper Funtions
     
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        
+        controller.allowsMultipleSelection = true
         for url in urls{
-            copyFileToDocumentsFolder(nameForFile: url.lastPathComponent, extForFile: ".shapr" , sourceURL: url)
-        }
-        
-    }
-    
-    
-    func copyFileToDocumentsFolder( nameForFile: String, extForFile: String , sourceURL : URL) {
-        
-        var fileName = nameForFile
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        //.appendingPathExtension(extForFile)
-        
-        if  fileAlreadyExist(fileName: nameForFile){
-                fileName = "\(nameForFile) (\(CoreDataHelper.shared.resultCount(itemName: fileName)))"
-        }
-        
-        destURL = documentsURL!.appendingPathComponent(fileName)
-        do {
-            try fileManager.copyItem(at: sourceURL, to: destURL!)
-            CoreDataHelper.shared.createData(fileData: Model(isSelected: false, fileName: fileName, size: String(sizeForLocalFilePath(filePath: destURL!.path)), filePath: destURL!.path , progressObj: 0, progressStep: 0, progressStl: 0, iSConvertedObj: false, isConvertedStep: false, isConvertedStl: false, uuid: UUID().uuidString), completionalHandler: { [self] isSave in
-                if isSave{
-                    reteriveData()
-                }
-            })
-            
-            
-        } catch {
-            print("Unable to copy file")
-        }
-        
-    }
-    
-    
-    
-    func sizeForLocalFilePath(filePath:String) -> UInt64 {
-        do {
-            let fileAttributes = try FileManager().attributesOfFileSystem(forPath: filePath)
-            if let fileSize = fileAttributes[FileAttributeKey.systemSize] as? UInt64 {
-                return fileSize
-            } else {
-                print("Failed to get a size attribute from path: \(filePath)")
-            }
-        } catch {
-            print("Failed to get file attributes for local path: \(filePath) with error: \(error)")
-        }
-        return 0
-    }
-    
-    func removeFileFromDir(fileName:String) {
-        guard let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-        let documentDirectoryFileUrl = documentsDirectory.appendingPathComponent(fileName)
-        if FileManager.default.fileExists(atPath: documentDirectoryFileUrl.path) {
-            do {
-                try FileManager.default.removeItem(at: documentDirectoryFileUrl)
-            } catch {
-                print("Could not delete file: \(error)")
+            if  DocumentHelper.shared.copyFileToDocumentsFolder(nameForFile: url.lastPathComponent, extForFile: ".shapr" , sourceURL: url){
+                reteriveData()
+            }else{
+                print("Error")
             }
         }
-    }
-    
-    func fileAlreadyExist(fileName : String) -> Bool {
-        guard let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return false}
-        let outputUrl = documentsDirectory.appendingPathComponent(fileName)
-        if FileManager.default.fileExists(atPath: outputUrl.path) {
-            return true
-        } else{
-            return false
-        }
+        
     }
 }
 
@@ -205,7 +140,7 @@ extension HomeViewVC : UICollectionViewDelegate , UICollectionViewDataSource , U
             return arrayOfData.count
         }
         else{
-            lisHaveNoData()
+            listHaveNoData()
             return 0
         }
     }
@@ -227,8 +162,23 @@ extension HomeViewVC : UICollectionViewDelegate , UICollectionViewDataSource , U
     
 }
 
+
+//MARK:- Cell Delegate
 extension HomeViewVC : ConversionCellDelegate{
     func convertToObj(tag: Int) {
+        print()
+        
+        do {
+            try convertObj.convert(from: URL(string : "file://\(arrayOfData[tag].filePath)")!, to: URL(string : "file://\(arrayOfData[tag].filePath)")!) { (d) -> ProgressAction in
+                type
+                print(d)
+                
+            }
+        } catch {
+            
+        }
+        
+        
         
     }
     
@@ -239,7 +189,6 @@ extension HomeViewVC : ConversionCellDelegate{
     func convertToStl(tag: Int) {
         
     }
-    
     
     func detailViewExpand(tag: Int) {
         if arrayOfData[tag].isSelected {
@@ -253,3 +202,5 @@ extension HomeViewVC : ConversionCellDelegate{
         }
     }
 }
+
+

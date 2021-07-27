@@ -61,7 +61,7 @@ class ConversionCell: UICollectionViewCell {
         stlLbl.isHidden = !model.isConvertedStl
         
         fileName.text = model.fileName
-        fileSize.text = "\(model.size) Size"
+        fileSize.text = "Size \(model.size) kb"
         
         stepProgressPercent.text = "\(String(model.progressStep))%"
         stlProgressPercent.text = "\(String(model.progressStl))%"
@@ -73,10 +73,12 @@ class ConversionCell: UICollectionViewCell {
         
         if model.isSelected == false{
             detailView.isHidden = true
+            expandBtn.setImage(UIImage(systemName: "chevron.down"), for: .normal)
         }else{
             detailView.isHidden = false
+            expandBtn.setImage(UIImage(systemName: "chevron.up"), for: .normal)
+            
         }
-        
     }
     
     @IBAction func didTapConvertStl(_ sender: UIButton) {
